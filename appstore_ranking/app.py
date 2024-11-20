@@ -1,42 +1,6 @@
 import requests
-from bs4 import BeautifulSoup
+from datetime import datetime
 import time
-
-def main(url):
-    
-    # Headers to mimic a browser visit
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
-    }
-    
-    # Make the request
-    response = requests.get(url, headers=headers)
-    
-    # Check if the request was successful
-    if response.status_code == 200:
-        # Parse the page content
-        soup = BeautifulSoup(response.content, "html.parser")
-    
-        # Extract the app name
-        app_name = soup.find("h1", class_="product-header__title").get_text(strip=True) if soup.find("h1", class_="product-header__title") else "N/A"
-    
-        # Extract the developer name
-        developer = soup.find("h2", class_="product-header__identity").get_text(strip=True) if soup.find("h2", class_="product-header__identity") else "N/A"
-    
-        # Extract the app rating
-        rating_element = soup.find("a", class_="inline-list__item")
-        rating = rating_element.get_text(strip=True) if rating_element else "No rating available"
-    
-        # Print the results
-        print(f"App Name: {app_name}")
-        print(f"Developer: {developer}")
-        print(f"Rating: {rating}")
-
-        text = f'\nApp Name : {app_name} \nRating: {rating}\n'
-        return text
-    
-    else:
-        print(f"Failed to fetch the page. Status code: {response.status_code}")
 
 def post_message(message):
 
@@ -53,20 +17,77 @@ def post_message(message):
     else:
         print(f"error in posting {response}")
 
+def get_data(app_id,categories,date_current):
+    
+# Base URL
+    url = 'https://app.sensortower.com/api/ios/category/category_history'
 
-apps = { 'coinbase' : "https://apps.apple.com/us/app/coinbase-buy-bitcoin-ether/id886427730",
-        'robinhood' : "https://apps.apple.com/us/app/robinhood-investing-for-all/id938003185",
-        'phantom' : "https://apps.apple.com/us/app/phantom-crypto-wallet/id1598432977",
-        'moonshot' : "https://apps.apple.com/us/app/moonshot/id6503993131",
-        'metamask' : "https://apps.apple.com/us/app/metamask-blockchain-wallet/id1438144202" 
+    # Query parameters
+    params = {
+        'app_ids[]': app_id,  # App ID
+        'categories[]': categories,  # App Store categories
+        'chart_type_ids[]': ['topfreeapplications'],
+        'countries[]': 'US',  # Country code
+        'end_date': date_current,  # End date
+        'start_date': date_current,  # Start date
+    }
+
+    # Headers (if any authorization or specific headers are needed)
+    headers = {
+        'User-Agent': 'Your User Agent',  # Replace with your user agent string
+        # 'Authorization': 'Bearer <token>',  # Uncomment if authentication is needed
+    }
+
+    # Sending the GET request
+    response = requests.get(url, params=params, headers=headers)
+
+    # Handling the response
+    if response.status_code == 200:        
+        app_dict = {}
+        data = response.json()[app_id]['US']
+        
+        for category in categories:
+            
+            if category in data:
+            
+                category_name = data[category]['topfreeapplications']['category_name']
+                rank = data[category]['topfreeapplications']['todays_rank']
+                app_dict[category_name] = rank
+            else:
+                if category == '0':
+                    app_dict['Overall'] = 'NA'
+                    
+        print(app_dict)
+        return app_dict
+    else:
+        print(f"Failed! Status code: {response.status_code}, Response: {response.text}")
+
+apps = { 'coinbase' : {'app_id' : '886427730', 'categories' : ['6015', '0']},
+        'robinhood' : {'app_id' : '938003185', 'categories' : ['6015', '0']} ,
+        'phantom' : {'app_id' : '1598432977', 'categories' : ['6002', '0']} ,
+        'moonshot' : {'app_id' : '6503993131', 'categories' : ['6015', '0']} ,
+        'metamask' : {'app_id' : '1438144202' , 'categories' : ['6002', '0']} 
        }
 
-full_text = "---APP RANKINGS---\n"
+date_current = datetime.now().strftime('%Y-%m-%d')
+
+app_all = {}
 
 for app in apps:
-    url = apps[app]
-    text = main(url)
-    full_text = full_text + text
-    time.sleep(5)
+    print(app)
+    name = app
+    app_id = apps[app]['app_id']
+    categories = apps[app]['categories']
+    app_all[name] = get_data(app_id,categories,date_current)
+    time.sleep(15)
 
-post_message(full_text)
+formatted_text = []
+for app, rankings in app_all.items():
+    ranking_info = ", ".join([f"{category}: {rank}" for category, rank in rankings.items()])
+    formatted_text.append(f"\n{app.capitalize()}: \n{ranking_info}")
+
+# Join and print the formatted text
+output = "\n".join(formatted_text)
+output = "---APP STORE RANKING---\n"+output
+
+post_message(output)
